@@ -6,6 +6,10 @@ void wsaInit(WORD &wVersionRequested, WSADATA &wsaData)
 	/* 윈속 버전 입력 */
 	wVersionRequested = MAKEWORD(2, 2);
 	/* 프로그램에서 원하는 윈속의 버전을 알려줘, 윈속 사용을 위한 라이브러리 초기화 */
+	/*
+		* errNum	: 윈속 함수에 반환되는 에러 번호
+			* 각 함수마다 성공, 실패에 따른 반환 값이 조금씩 다름
+	*/
 	int errNum = WSAStartup(wVersionRequested, &wsaData);
 
 	/* 만일 윈속 초기화가 실패했을 경우 */
@@ -71,7 +75,7 @@ void bindSocket(SOCKET &sock, SOCKADDR_IN &servAddr)
 	}
 }
 
-bool listenClient(SOCKET& servSock, SOCKADDR_IN &cliAddr)
+SOCKET listenClient(SOCKET& servSock, SOCKADDR_IN &cliAddr)
 {
 	/* 서버가 클라이언트의 소켓 연결 요청을 듣기 시작 */
 	listen(servSock, 5);
@@ -81,16 +85,48 @@ bool listenClient(SOCKET& servSock, SOCKADDR_IN &cliAddr)
 	if (cliSock == INVALID_SOCKET)
 	{
 		cout << "[Client Socket Error : " << WSAGetLastError() << "]\n";
-		return false;
+		exit(1);
 	}
 
 	cout << "[Connection establishted.New Client Socket number is " << cliSock << "]\n";
-	return true;
+	return cliSock;
 }
 
 bool commWithClient(SOCKET &servSock, SOCKET &cliSock) 
 {
+	/* buf	: 패킷을 통해 전송할 데이터 */
+	char buf[BUF_SIZE];
+	/* 클라이언트 소켓을 통해 전송된 모든 데이터 */
+	string msg;
+	/*
+		* bytesCnt	: send 함수의 반환 값
+			* send 함수를 통해 전송한 패킷의 byte 수를 반환함
+	*/
 	int byteCnts;
+	while (true)
+	{
+		msg = "";
+		/*
+			* 클라이언트 소켓을 통해 메세지를 전송 받음
+			* 1 : 해당 클라이언트 소켓
+			* 2 : 메세지 버퍼
+			* 3 : 최대 메세지 크기
+			* 4 : 플래그 ( 옵션 적용 가능 )
+		*/
+		while (recv(cliSock, buf, BUF_SIZE, 0))
+		{ 
+			/* 전송된 데이터를 합쳐 줌 */
+			msg += buf;
+		}
+		if (msg == "END") break;
+		else
+		{
+			cout << "[Receive Client " << cliSock << "Message]\n";
+			cout << msg << '\n';
+		}
+	}
+
+	cout << "[Communication is Done]\n";
 }
 
 int main(void)
@@ -111,22 +147,24 @@ int main(void)
 			* cliAddr 변수의 경우, 서버와 클라이언트를 연결할 때 한 번만 사용하므로 하나면 됨
 	*/
 	SOCKADDR_IN servAddr, cliAddr;
-	/*
-		* errNum	: 윈속 함수에 반환되는 에러 번호
-			* 각 함수마다 성공, 실패에 따른 반환 값이 조금씩 다름
-		* bytesCnt	: send 함수의 반환 값
-			* send 함수를 통해 전송한 패킷의 byte 수를 반환함
-	*/
-	int bytesCnt;
-	/* buf	: 패킷을 통해 전송할 데이터 */
-	string buf;
+	/* 서버 소켓과 클라이언트 소켓 */
+	SOCKET servSock, cliSock;
 
 	/* 윈속 초기화 */
 	wsaInit(wVersionRequested, wsaData);
 	/* 소켓 초기화 */
-	SOCKET servSock = socketInit(servAddr);
+	servSock = socketInit(servAddr);
 	/* 소켓 할당 */
 	bindSocket(servSock, servAddr);
 	/* 클라이언트의 소켓 연결 대기 */
-	listenClient(servSock, cliAddr);
+	cliSock = listenClient(servSock, cliAddr);
+	/* 클라이언트와 서버간의 소켓 통신을 시작 */
+	commWithClient(servSock, cliSock);
+	/* 서버 소켓 종료 */
+	closesocket(servSock);
+	/* 윈속 초기화 */
+	WSACleanup();
+
+	cout << "[Program Termination]";
+	return 0;
 }
