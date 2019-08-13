@@ -41,8 +41,10 @@ SOCKET socketInit(SOCKADDR_IN& servAddr)
 	/*
 		* sin_addr		: 32 bit IP 정보
 			* 서버 IP 주소를 입력
+		* inet_addr 함수를 사용할 수 없기 때문에 inet_pton 함수를 사용
+		* int inet_pton(int af, const char *src, void *dst);
 	*/
-	servAddr.sin_addr.s_addr = inet_addr(SERV_IP);
+	inet_pton(AF_INET, SERV_IP, &servAddr.sin_addr.s_addr);
 	/*
 		SOCK_STREAM		: 스트림, TCP 프로토콜의 전송 방식
 		SOCK_DGRAM		: 데이터그램,  UDP 프로토콜의 전송 방식
@@ -92,20 +94,18 @@ SOCKET listenClient(SOCKET& servSock, SOCKADDR_IN &cliAddr)
 	return cliSock;
 }
 
-bool commWithClient(SOCKET &servSock, SOCKET &cliSock) 
+void commWithClient(SOCKET &servSock, SOCKET &cliSock) 
 {
+	int byteCnts;
 	/* buf	: 패킷을 통해 전송할 데이터 */
 	char buf[BUF_SIZE];
-	/* 클라이언트 소켓을 통해 전송된 모든 데이터 */
-	string msg;
 	/*
 		* bytesCnt	: send 함수의 반환 값
 			* send 함수를 통해 전송한 패킷의 byte 수를 반환함
 	*/
-	int byteCnts;
 	while (true)
 	{
-		msg = "";
+		memset(buf, 0, sizeof(buf));
 		/*
 			* 클라이언트 소켓을 통해 메세지를 전송 받음
 			* 1 : 해당 클라이언트 소켓
@@ -113,17 +113,11 @@ bool commWithClient(SOCKET &servSock, SOCKET &cliSock)
 			* 3 : 최대 메세지 크기
 			* 4 : 플래그 ( 옵션 적용 가능 )
 		*/
-		while (recv(cliSock, buf, BUF_SIZE, 0))
-		{ 
-			/* 전송된 데이터를 합쳐 줌 */
-			msg += buf;
-		}
-		if (msg == "END") break;
-		else
-		{
-			cout << "[Receive Client " << cliSock << "Message]\n";
-			cout << msg << '\n';
-		}
+		byteCnts = recv(cliSock, buf, BUF_SIZE, 0);
+		/* 클라이언트로부터 전송받은 메세지를 출력 */
+		cout << "[Seeded " << cliSock << " ]>>> " << buf << '\n';
+		/* END 메세지를 전송받을 경우 프로그램 종료 */
+		if (!strcmp(buf,"END")) break;
 	}
 
 	cout << "[Communication is Done]\n";

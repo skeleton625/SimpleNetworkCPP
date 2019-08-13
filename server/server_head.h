@@ -3,6 +3,8 @@
 #include <string>
 /* Window 용 Socket 라이브러리 */
 #include <WinSock2.h>
+/* inet_addr 함수 대신 inet_pton 함수 사용하기 위한 헤더 파일 */
+#include <WS2tcpip.h>
 using namespace std;
 /* ws2_32.lib 파일 링크 */
 #pragma comment(lib, "ws2_32.lib")
