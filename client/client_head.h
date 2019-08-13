@@ -2,6 +2,8 @@
 #include <string>
 /* Window 용 Socket 라이브러리 */
 #include <WinSock2.h>
+/* inet_pton 함수 사용 */
+#include <WS2tcpip.h>
 using namespace std;
 /* ws2_32.lib 파일 링크 */
 #pragma comment(lib, "ws2_32.lib")
