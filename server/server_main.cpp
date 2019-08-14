@@ -24,8 +24,9 @@ void wsaInit(WORD &wVersionRequested, WSADATA &wsaData)
 	}
 }
 
-SOCKET socketInit(SOCKADDR_IN& servAddr)
+SOCKET socketInit(SOCKADDR_IN &servAddr)
 {
+	
 	/*
 * sin_family	: IPv4 주소체계를 나타냄
 	* 기본적으로 AF_INET(IPv4 인터넷 프로토콜) 으로 정의
@@ -77,24 +78,43 @@ void bindSocket(SOCKET &sock, SOCKADDR_IN &servAddr)
 	}
 }
 
-SOCKET listenClient(SOCKET& servSock, SOCKADDR_IN &cliAddr)
+void listenClient(SOCKET& servSock)
 {
-	/* 서버가 클라이언트의 소켓 연결 요청을 듣기 시작 */
-	listen(servSock, 5);
-	cout << "Waiting for Client ... ... ... ..." << '\n';
-	int cliLen = sizeof(cliAddr);
-	SOCKET cliSock = accept(servSock, reinterpret_cast<SOCKADDR*>(&cliAddr), &cliLen);
-	if (cliSock == INVALID_SOCKET)
-	{
-		cout << "[Client Socket Error : " << WSAGetLastError() << "]\n";
-		exit(1);
+	while (!isServerEnd) {
+		/* 서버가 클라이언트의 소켓 연결 요청을 듣기 시작 */
+		listen(servSock, 5);
+		cout << "Waiting for Client ... ... ... ..." << '\n';
+		/* 새로 생성할 클라이언트 소켓의 주소 변수 정의 */
+		SOCKADDR_IN cliAddr;
+		int cliLen = sizeof(cliAddr);
+		/* 클라이언트가 서버로 메세지를 전송할 경우 해당 클라이언트의 소켓 생성 */
+		SOCKET cliSock = accept(servSock, reinterpret_cast<SOCKADDR*>(&cliAddr), &cliLen);
+		/* 소켓 생성시 오류가 있을 경우, 에러를 출력하고 반응하지 않음 */
+		if (cliSock == INVALID_SOCKET)
+		{
+			cout << "[Client Socket Error : " << WSAGetLastError() << "]\n";
+		}
+		/* 또한 서버가 접속한 클라이언트 수가 서버 허용량 보다 많을 경우, 에러를 출력 */
+		if (sockCnt > 5)
+		{
+			cout << "[There is NO place to connect with Client in Server]\n";
+		}
+		/* 그렇지 않을 경우 해당 클라이언트 소켓을 서버에 저장 */
+		else
+		{
+			for (int i = 0; i < CLIENT_MAX_COUNT; i++) {
+				if (clientSock[i] == NULL) {
+					clientSock[i] = cliSock;
+					++sockCnt;
+					cout << "[Connection establishted.New Client Socket number is " << cliSock << "]\n";
+					break;
+				}
+			}
+		}
 	}
-
-	cout << "[Connection establishted.New Client Socket number is " << cliSock << "]\n";
-	return cliSock;
 }
 
-void commWithClient(SOCKET &servSock, SOCKET &cliSock) 
+void commWithClient(SOCKET &servSock) 
 {
 	int byteCnts;
 	/* buf	: 패킷을 통해 전송할 데이터 */
@@ -105,19 +125,31 @@ void commWithClient(SOCKET &servSock, SOCKET &cliSock)
 	*/
 	while (true)
 	{
-		memset(buf, 0, sizeof(buf));
-		/*
-			* 클라이언트 소켓을 통해 메세지를 전송 받음
-			* 1 : 해당 클라이언트 소켓
-			* 2 : 메세지 버퍼
-			* 3 : 최대 메세지 크기
-			* 4 : 플래그 ( 옵션 적용 가능 )
-		*/
-		byteCnts = recv(cliSock, buf, BUF_SIZE, 0);
-		/* 클라이언트로부터 전송받은 메세지를 출력 */
-		cout << "[Seeded " << cliSock << " ]>>> " << buf << '\n';
-		/* END 메세지를 전송받을 경우 프로그램 종료 */
-		if (!strcmp(buf,"END")) break;
+		for(int i = 0; i < 5; i++){
+			memset(buf, 0, sizeof(buf));
+			/*
+				* 클라이언트 소켓을 통해 메세지를 전송 받음
+				* 1 : 해당 클라이언트 소켓
+				* 2 : 메세지 버퍼
+				* 3 : 최대 메세지 크기
+				* 4 : 플래그 ( 옵션 적용 가능 )
+			*/
+			byteCnts = recv(clientSock[i], buf, BUF_SIZE, 0);
+			/* 현재 클라이언트로부터 전송된 메세지가 없을 경우 건너 뜀 */
+			if (byteCnts == 0) continue;
+			/* 클라이언트로부터 전송받은 메세지를 출력 */
+			cout << "[Seeded " << clientSock[i] << " ]>>> " << buf << '\n';
+			/* END 메세지를 전송받을 경우 프로그램 종료 */
+			if (strcmp(buf, "END")) {
+				--sockCnt;
+				/*
+					* 소켓간의 전송을 종료
+					* 서버에서 해당 클라이언트의 소켓을 제거
+				*/
+				shutdown(clientSock[i], SD_BOTH);
+				clientSock[i] = NULL;
+			}
+		}
 	}
 
 	cout << "[Communication is Done]\n";
@@ -140,9 +172,9 @@ int main(void)
 		* cliAddr	: 클라이언트 소켓 정보 변수
 			* cliAddr 변수의 경우, 서버와 클라이언트를 연결할 때 한 번만 사용하므로 하나면 됨
 	*/
-	SOCKADDR_IN servAddr, cliAddr;
+	SOCKADDR_IN servAddr;
 	/* 서버 소켓과 클라이언트 소켓 */
-	SOCKET servSock, cliSock;
+	SOCKET servSock;
 
 	/* 윈속 초기화 */
 	wsaInit(wVersionRequested, wsaData);
@@ -151,13 +183,20 @@ int main(void)
 	/* 소켓 할당 */
 	bindSocket(servSock, servAddr);
 	/* 클라이언트의 소켓 연결 대기 */
-	cliSock = listenClient(servSock, cliAddr);
+	thread lis(listenClient, servSock);
 	/* 클라이언트와 서버간의 소켓 통신을 시작 */
-	commWithClient(servSock, cliSock);
+	thread comm(commWithClient, servSock);
+
+	/* 두 쓰레드 반환값 - 사실상 없음 */
+	lis.join();
+	comm.join();
 	/* 서버 소켓 종료 */
 	closesocket(servSock);
 	/* 윈속 초기화 */
 	WSACleanup();
+	/* 듣기, 대화 쓰레드 종료 */
+	lis.detach();
+	comm.detach();
 
 	cout << "[Program Termination]";
 	return 0;
