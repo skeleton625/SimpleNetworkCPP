@@ -8,6 +8,7 @@
 #include <WS2tcpip.h>
 /* 여러 클라이언트의 접속과 메세지 출력을 하기 위한 쓰레드 클래스 */
 #include <thread>
+#include <vector>
 using namespace std;
 /* ws2_32.lib 파일 링크 */
 #pragma comment(lib, "ws2_32.lib")
@@ -23,6 +24,6 @@ using namespace std;
 /* 서버에 연결할 수 있는 총 클라이언트 수 */
 #define CLIENT_MAX_COUNT 5
 
-int sockCnt = 0;
-bool isServerEnd = false;
-SOCKET clientSock[5];
+static int sockCnt = 0;
+static bool isServerEnd = false;
+static vector<thread> workers;

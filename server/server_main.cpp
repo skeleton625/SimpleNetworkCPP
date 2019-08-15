@@ -78,7 +78,46 @@ void bindSocket(SOCKET &sock, SOCKADDR_IN &servAddr)
 	}
 }
 
-void listenClient(SOCKET& servSock)
+void commWithClient(SOCKET& servSock, SOCKET cliSock)
+{
+	/*
+		* bytesCnt	: send 함수의 반환 값
+			* send 함수를 통해 전송한 패킷의 byte 수를 반환함
+	*/
+	int byteCnts;
+	/* buf	: 패킷을 통해 전송할 데이터 */
+	char buf[BUF_SIZE];
+	while (true)
+	{
+		memset(buf, 0, sizeof(buf));
+		/* 비어있는 공간일 경우 넘어감 */
+		/*
+			* 클라이언트 소켓을 통해 메세지를 전송 받음
+			* 1 : 해당 클라이언트 소켓
+			* 2 : 메세지 버퍼
+			* 3 : 최대 메세지 크기
+			* 4 : 플래그 ( 옵션 적용 가능 )
+		*/
+		byteCnts = recv(cliSock, buf, BUF_SIZE, 0);
+		if (byteCnts <= 0) continue;
+		/* 클라이언트로부터 전송받은 메세지를 출력 */
+		cout << "[Sended " << cliSock << " ]>>> " << buf << '\n';
+		/* END 메세지를 전송받을 경우 프로그램 종료 */
+		if (!strcmp(buf, "END")) {
+			--sockCnt;
+			/*
+				* 소켓간의 전송을 종료
+				* 서버에서 해당 클라이언트의 소켓을 제거
+			*/
+			cout << "[Client " << cliSock << " was disconnected !!]\n";
+			shutdown(cliSock, SD_BOTH);
+			break;
+		}
+	}
+}
+
+
+SOCKET listenClient(SOCKET& servSock)
 {
 	while (!isServerEnd) {
 		/* 서버가 클라이언트의 소켓 연결 요청을 듣기 시작 */
@@ -102,57 +141,16 @@ void listenClient(SOCKET& servSock)
 		/* 그렇지 않을 경우 해당 클라이언트 소켓을 서버에 저장 */
 		else
 		{
-			for (int i = 0; i < CLIENT_MAX_COUNT; i++) {
-				if (clientSock[i] == NULL) {
-					clientSock[i] = cliSock;
-					++sockCnt;
-					cout << "[Connection establishted.New Client Socket number is " << cliSock << "]\n";
-					break;
-				}
-			}
+			/* 비어 있는 변수에 해당 클라이언트 소켓 객체를 입력 */
+			++sockCnt;
+			cout << "[Connection establishted.New Client Socket number is " << cliSock << "]\n";
+			/* 클라이언트의 메세지 전송 시작 */
+			/* 연결된 클라이언트의 대화를 Thread로 동시에 처리 */
+			workers.push_back(thread(commWithClient, ref(servSock), ref(cliSock)));
+			//return cliSock;
 		}
 	}
-}
-
-void commWithClient(SOCKET &servSock) 
-{
-	int byteCnts;
-	/* buf	: 패킷을 통해 전송할 데이터 */
-	char buf[BUF_SIZE];
-	/*
-		* bytesCnt	: send 함수의 반환 값
-			* send 함수를 통해 전송한 패킷의 byte 수를 반환함
-	*/
-	while (true)
-	{
-		for(int i = 0; i < 5; i++){
-			memset(buf, 0, sizeof(buf));
-			/*
-				* 클라이언트 소켓을 통해 메세지를 전송 받음
-				* 1 : 해당 클라이언트 소켓
-				* 2 : 메세지 버퍼
-				* 3 : 최대 메세지 크기
-				* 4 : 플래그 ( 옵션 적용 가능 )
-			*/
-			byteCnts = recv(clientSock[i], buf, BUF_SIZE, 0);
-			/* 현재 클라이언트로부터 전송된 메세지가 없을 경우 건너 뜀 */
-			if (byteCnts == 0) continue;
-			/* 클라이언트로부터 전송받은 메세지를 출력 */
-			cout << "[Seeded " << clientSock[i] << " ]>>> " << buf << '\n';
-			/* END 메세지를 전송받을 경우 프로그램 종료 */
-			if (strcmp(buf, "END")) {
-				--sockCnt;
-				/*
-					* 소켓간의 전송을 종료
-					* 서버에서 해당 클라이언트의 소켓을 제거
-				*/
-				shutdown(clientSock[i], SD_BOTH);
-				clientSock[i] = NULL;
-			}
-		}
-	}
-
-	cout << "[Communication is Done]\n";
+	return NULL;
 }
 
 int main(void)
@@ -183,20 +181,17 @@ int main(void)
 	/* 소켓 할당 */
 	bindSocket(servSock, servAddr);
 	/* 클라이언트의 소켓 연결 대기 */
-	thread lis(listenClient, servSock);
-	/* 클라이언트와 서버간의 소켓 통신을 시작 */
-	thread comm(commWithClient, servSock);
-
+	//thread lis(listenClient, ref(servSock));
 	/* 두 쓰레드 반환값 - 사실상 없음 */
-	lis.join();
-	comm.join();
+	SOCKET cliSock = listenClient(servSock);
+	//commWithClient(servSock, cliSock);
+	//lis.join();
 	/* 서버 소켓 종료 */
 	closesocket(servSock);
 	/* 윈속 초기화 */
 	WSACleanup();
 	/* 듣기, 대화 쓰레드 종료 */
-	lis.detach();
-	comm.detach();
+	//lis.detach();
 
 	cout << "[Program Termination]";
 	return 0;
